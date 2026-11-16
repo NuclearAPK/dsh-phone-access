@@ -13,7 +13,8 @@
     "client.js",
     "src",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "site"
   ],
   "scripts": {
     "test": "node --test"
@@ -32,3 +33,4 @@
     "qrcode-generator": "^2.0.4"
   }
 }
+

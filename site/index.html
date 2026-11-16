@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH Phone Access — веб-интерфейс DeepSeek Harness с телефона</title>
+<meta name="description" content="Плагин для DeepSeek Harness: второй HTTPS-листенер, вход по одноразовой ссылке и QR, полный доступ к сессиям с телефона.">
+<style>
+  :root {
+    color-scheme: dark light;
+    --bg: #0a0c0b;
+    --panel: #101413;
+    --panel-2: #151a18;
+    --line: #222925;
+    --line-strong: #2f3933;
+    --text: #e9eeea;
+    --muted: #99a39c;
+    --accent: #b6f05a;
+    --accent-ink: #0d1407;
+    --danger: #ff8a7a;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --radius: 16px;
+    --max: 960px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f7f4;
+      --panel: #ffffff;
+      --panel-2: #eef1ec;
+      --line: #dfe3dc;
+      --line-strong: #c9cfc6;
+      --text: #151a16;
+      --muted: #5d665e;
+      --accent: #2f7d43;
+      --accent-ink: #ffffff;
+      --danger: #b03a2b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  a { color: inherit; }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  .wrap { width: min(100% - 40px, var(--max)); margin-inline: auto; }
+
+  /* ── header ─────────────────────────────────────────────── */
+  .top {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(14px);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom: 1px solid var(--line);
+  }
+  .top .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand svg { width: 22px; height: 22px; flex: none; }
+  .nav { display: flex; gap: 18px; margin-left: auto; font-size: 14px; color: var(--muted); }
+  .nav a { text-decoration: none; padding: 6px 0; border-bottom: 1px solid transparent; transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { .nav a:hover { color: var(--text); border-color: var(--line-strong); } }
+  @media (max-width: 720px) { .nav { display: none; } }
+
+  /* ── hero ───────────────────────────────────────────────── */
+  .hero { padding: 72px 0 48px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 500 13px/1 var(--mono);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 14px;
+    background: var(--panel);
+  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+  h1 {
+    margin: 22px 0 0;
+    font-size: clamp(34px, 6vw, 58px);
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+    font-weight: 650;
+    max-width: 15ch;
+    text-wrap: balance;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lead { margin: 20px 0 0; max-width: 62ch; font-size: clamp(16px, 1.6vw, 19px); color: var(--muted); text-wrap: pretty; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 0; padding: 0; list-style: none; }
+  .chips li {
+    font: 500 12.5px/1 var(--mono);
+    color: var(--text);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 8px 12px;
+  }
+  .chips li span { color: var(--muted); }
+
+  /* ── mock card ──────────────────────────────────────────── */
+  .mock {
+    margin: 44px 0 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 70%, var(--bg)));
+    overflow: hidden;
+    box-shadow: 0 30px 80px -50px rgb(0 0 0 / 0.9);
+  }
+  .mock-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font: 500 12px/1 var(--mono); }
+  .mock-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); display: block; }
+  .mock-body { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 0; }
+  @media (max-width: 760px) { .mock-body { grid-template-columns: 1fr; } }
+  .mock-left { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+  .mock-right { padding: 22px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  @media (max-width: 760px) { .mock-right { border-left: 0; border-top: 1px solid var(--line); } }
+  .mock-title { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+  .mock-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .mock-url { font: 500 13px/1.4 var(--mono); color: var(--text); }
+  .pill { font: 500 11.5px/1 var(--mono); border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 10px; color: var(--text); }
+  .pill.ok { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+  .btn { font: 500 12.5px/1 inherit; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--text); border-radius: 9px; padding: 9px 12px; cursor: default; transition: transform 160ms var(--ease-out); }
+  .btn:active { transform: scale(0.97); }
+  .btn.accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .qr { position: relative; width: 132px; height: 132px; border-radius: 10px; overflow: hidden;
+    background: conic-gradient(from 0deg, var(--text) 0 25%, transparent 0 50%, var(--text) 0 75%, transparent 0) 0 0/11px 11px;
+    opacity: 0.92; }
+  .qr::before, .qr::after, .qr > i {
+    content: ""; position: absolute; width: 34px; height: 34px; border-radius: 5px;
+    background: var(--bg); border: 6px solid var(--text);
+  }
+  .qr::before { top: 7px; left: 7px; }
+  .qr::after { top: 7px; right: 7px; }
+  .qr > i { bottom: 7px; left: 7px; }
+  .mock-note { font-size: 12px; color: var(--muted); margin: 0; }
+
+  /* ── sections ───────────────────────────────────────────── */
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  .kicker { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+  h2 { margin: 0; font-size: clamp(24px, 3.4vw, 34px); line-height: 1.15; letter-spacing: -0.025em; font-weight: 650; text-wrap: balance; }
+  .section-lead { margin: 14px 0 0; max-width: 64ch; color: var(--muted); text-wrap: pretty; }
+
+  /* steps */
+  .steps { margin: 34px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); transition: border-color 200ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { .step:hover { border-color: var(--line-strong); } }
+  .step b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line-strong); font: 600 13px/1 var(--mono); color: var(--accent); }
+  .step h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .step p { margin: 0; color: var(--muted); font-size: 14px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 26px 0 0; font: 500 12.5px/1 var(--mono); color: var(--muted); }
+  .flow span { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel); color: var(--text); }
+  .flow b { color: var(--line-strong); font-weight: 400; }
+
+  /* grid of features */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 34px 0 0; }
+  @media (min-width: 760px) { .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* code */
+  pre {
+    margin: 18px 0 0;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel-2);
+    overflow-x: auto;
+    font: 400 13px/1.65 var(--mono);
+    color: var(--text);
+    tab-size: 2;
+  }
+  code { font-family: var(--mono); font-size: 0.94em; }
+  .cm { color: var(--muted); }
+  .ck { color: var(--accent); }
+
+  /* warning + list */
+  .note { border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, var(--panel)); border-radius: 14px; padding: 18px 20px; margin: 22px 0 0; }
+  .note strong { color: var(--danger); }
+  .note p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .list { margin: 20px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; max-width: 72ch; }
+  .list li { position: relative; padding-left: 22px; color: var(--muted); font-size: 14.5px; }
+  .list li::before { content: "—"; position: absolute; left: 0; color: var(--line-strong); }
+  .list li b { color: var(--text); font-weight: 600; }
+
+  /* FAQ */
+  details { border-bottom: 1px solid var(--line); padding: 16px 0; }
+  details:first-of-type { border-top: 1px solid var(--line); margin-top: 28px; }
+  summary { cursor: pointer; font-weight: 550; list-style: none; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font: 400 18px/1 var(--mono); color: var(--muted); transition: transform 200ms var(--ease-out); }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { margin: 10px 0 0; color: var(--muted); font-size: 14.5px; max-width: 70ch; }
+
+  footer { border-top: 1px solid var(--line); padding: 34px 0 56px; color: var(--muted); font-size: 13px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; }
+  footer code { color: var(--text); }
+
+  a:focus-visible, summary:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="21" height="21" rx="6" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M7 13.5l3.2 3.2L17.5 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      dsh-phone-access
+    </div>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#how">Как работает</a>
+      <a href="#install">Установка</a>
+      <a href="#security">Безопасность</a>
+      <a href="#faq">Вопросы</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <p class="eyebrow"><i class="dot" aria-hidden="true"></i> Плагин для DeepSeek Harness</p>
+    <h1>DSH с телефона, <em>без второго клиента</em></h1>
+    <p class="lead">
+      Второй листенер поверх TLS в том же процессе: телефон открывает ровно тот интерфейс,
+      что и компьютер, и работает в тех же сессиях. Окно Desktop и его loopback-канал не трогаются.
+    </p>
+    <ul class="chips">
+      <li><span>транспорт</span> HTTPS + WSS</li>
+      <li><span>вход</span> одноразовая ссылка и QR</li>
+      <li><span>сертификат</span> локальный CA</li>
+      <li><span>отзыв</span> закрывает и открытые потоки</li>
+    </ul>
+
+    <div class="mock" role="img" aria-label="Макет карточки «Телефон» в настройках: адрес, отпечаток CA, кнопки и QR-код">
+      <div class="mock-bar"><i></i><i></i><i></i><span style="margin-left:8px">Настройки → Телефон</span></div>
+      <div class="mock-body">
+        <div class="mock-left">
+          <p class="mock-title">Доступ с телефона</p>
+          <div class="mock-row">
+            <span class="mock-url">https://dsh.example.com:3099</span>
+            <span class="pill ok">listening</span>
+            <span class="pill">TLS: auto · туннелей: 1</span>
+          </div>
+          <div class="mock-row"><span>CA SHA-256: 4B:1C:9E:…:7A:20</span></div>
+          <div class="mock-row">
+            <span class="btn accent">Показать ссылку</span>
+            <span class="btn">Скачать CA</span>
+            <span class="btn">Отозвать все</span>
+          </div>
+          <p class="mock-note">Ссылка одноразовая и живёт 10 минут; новый QR — по кнопке.</p>
+        </div>
+        <div class="mock-right">
+          <div class="qr" aria-hidden="true"><i></i></div>
+          <p class="mock-note">Наведите камеру — откроется вход или файл сертификата.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <p class="kicker">Как это устроено</p>
+      <h2>Один хост, два входа</h2>
+      <p class="section-lead">
+        Плагин не запускает второй DSH и не открывает вторую копию хранилища сессий.
+        Он поднимает ещё один HTTP-сервер в том же процессе и проксирует запросы в локальный.
+      </p>
+
+      <div class="flow" aria-label="Схема запроса">
+        <span>телефон</span><b>→</b><span>HTTPS/WSS 3099</span><b>→</b><span>TLS-листенер плагина</span><b>→</b><span>127.0.0.1</span><b>→</b><span>хост DSH</span>
+      </div>
+
+      <ol class="steps">
+        <li class="step"><b>1</b><div><h3>Своя авторизация</h3><p>Одноразовый токен меняется на подписанную куку <code>dsh-phone</code>: HttpOnly, Secure, SameSite=Lax. Дальше каждый запрос проверяется по ней.</p></div></li>
+        <li class="step"><b>2</b><div><h3>Внутренняя кука добывается сам</h3><p>Плагин обменивает launch-token хоста через <code>connection.authenticatedUrl</code> и держит свою куку в памяти. Телефон её никогда не видит.</p></div></li>
+        <li class="step"><b>3</b><div><h3>HTTP и WebSocket</h3><p>Заголовки переписываются: <code>Host</code>, <code>Origin</code>, <code>Cookie</code>. <code>Set-Cookie</code> хоста вырезается. Апгрейды идут через тот же реестр туннелей.</p></div></li>
+        <li class="step"><b>4</b><div><h3>Отзыв рвёт всё</h3><p>Ротация секрета инвалидирует куки, а реестр закрывает и WebSocket, и keep-alive соединения — поток не переживает отзыв.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <p class="kicker">Установка</p>
+      <h2>Три шага и перезапуск</h2>
+      <p class="section-lead">Плагин живёт в профиле как локальный бандл. Конфигурация — одна строка в патче профиля.</p>
+
+      <pre><code><span class="cm"># ~/.dsh/profiles/desktop/cordis.patch.yml</span>
+- id: phone-access
+  name: '@local/dsh-phone-access'
+  config:
+    host: <span class="ck">192.168.1.237</span>        <span class="cm"># один локальный IPv4</span>
+    port: 3099
+    publicUrl: <span class="ck">https://dsh.example.com:3099</span>  <span class="cm"># внешний адрес для ссылок</span>
+    tls:
+      mode: auto                <span class="cm"># auto | files | off</span></code></pre>
+
+      <div class="note">
+        <strong>Порт наружу даёт доступ владельца.</strong>
+        <p>Телефон получает те же права, что и компьютер: файлы, терминал, все сессии. Ссылка одноразовая, но украденная кука живёт до «Отозвать все». Только доверенная сеть или туннель.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="wrap">
+      <p class="kicker">Безопасность</p>
+      <h2>Что защищено и чем</h2>
+      <div class="grid two">
+        <div class="card"><h3>Только TLS</h3><p>Режим <code>off</code> возможен, но помечен предупреждением и в карточке, и в логе: кука уйдёт открытым текстом.</p></div>
+        <div class="card"><h3>Свой CA</h3><p>Лист выпускается под локальный CA и перевыпускается под тем же CA при смене адреса — доверие телефона не теряется.</p></div>
+        <div class="card"><h3>Origin и CSWSH</h3><p>Чужой <code>Origin</code> и cross-site запросы отклоняются; верхнеуровневая навигация по QR разрешена, апгрейд — нет.</p></div>
+        <div class="card"><h3>Отзыв</h3><p>Одна кнопка: секрет куки ротируется, туннели и keep-alive соединения закрываются.</p></div>
+      </div>
+      <ul class="list">
+        <li><b>Не защищено:</b> кто получил ссылку или куку — получает владельца хоста.</li>
+        <li><b>Не защищено:</b> ключ CA лежит на компьютере рядом с материалами.</li>
+        <li><b>Не входит в v1:</b> роли и права, несколько пользователей, push-уведомления, интернет-доступ из коробки.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <p class="kicker">Вопросы</p>
+      <h2>Коротко о частом</h2>
+
+      <details>
+        <summary>Почему нельзя просто перевесить существующий листенер?</summary>
+        <p>Desktop говорит с локальным хостом из окна <code>dsh-app://app</code>, а WebSocket пускает только на <code>ws://127.0.0.1/*</code>. Смена адреса лишит окно живого канала, поэтому нужен второй вход.</p>
+      </details>
+      <details>
+        <summary>Что будет, если телефон не открывает адрес?</summary>
+        <p>Скорее всего брандмауэр: разрешите входящие на порт для частной сети. Если адрес внешний — проверьте проброс на роутере и DNS.</p>
+      </details>
+      <details>
+        <summary>Меня устраивает другой домен или туннель. Как поменять?</summary>
+        <p>Поле «Внешний адрес» в карточке: ссылки и QR пересчитываются сразу. Если новое имя не покрыто сертификатом, карточка скажет — нужен перезапуск.</p>
+      </details>
+      <details>
+        <summary>Телефон показывает предупреждение сертификата</summary>
+        <p>CA не установлен или установлен как обычный, а не как доверенный корневой. Android: «Сертификат ЦС». iOS: профиль, затем «Доверие сертификатов».</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><code>@local/dsh-phone-access</code> · плагин для DeepSeek Harness</span>
+    <span>HTTP · WSS · TLS · без внешних зависимостей в интерфейсе</span>
+  </div>
+</footer>
+
+</body>
+</html>
+
+
