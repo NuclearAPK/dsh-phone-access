@@ -1,7 +1,7 @@
 {
   "name": "@local/dsh-phone-access",
   "version": "0.1.0",
-  "private": true,
+  "private": false,`n  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -33,4 +33,5 @@
     "qrcode-generator": "^2.0.4"
   }
 }
+
 
