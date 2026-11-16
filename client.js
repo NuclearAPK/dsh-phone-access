@@ -99,6 +99,9 @@ window.__ModuleLoader__.load({
               h('strong', null, status.url),
               h('span', { style: styles.muted }, `TLS: ${status.tlsMode} · туннелей: ${String(status.tunnels)}`),
             ),
+            status.bindUrl && status.bindUrl !== status.url
+              ? h('p', { style: styles.muted }, `Слушает: ${status.bindUrl} · ссылки ведут на внешний адрес`)
+              : null,
             status.caFingerprint
               ? h('pre', { style: styles.code }, `CA SHA-256: ${status.caFingerprint}`)
               : null,

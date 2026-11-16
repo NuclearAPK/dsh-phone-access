@@ -212,3 +212,10 @@ test('qr for the login link validates the token shape', async () => {
   assert.equal(missing.status, 409)
 })
 
+
+test('resolveConfig accepts one public url and rejects anything else', () => {
+  assert.equal(resolveConfig({ publicUrl: 'https://dsh.example.com/' }).publicUrl, 'https://dsh.example.com')
+  assert.equal(resolveConfig({}).publicUrl, undefined)
+  assert.throws(() => resolveConfig({ publicUrl: 'ftp://dsh.example.com' }), /publicUrl/)
+  assert.throws(() => resolveConfig({ publicUrl: 'dsh.example.com' }), /publicUrl/)
+})

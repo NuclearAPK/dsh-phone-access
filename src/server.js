@@ -39,6 +39,8 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
   const scheme = secure ? 'https' : 'http'
   let port = config.port
   let origin = `${scheme}://${config.host}:${String(port)}`
+  /** The root links and QR codes advertise: an external address when configured. */
+  let advertised = config.publicUrl ?? origin
   const maxAgeSeconds = config.cookieDays * 86_400
 
   /** @param {http.IncomingMessage} req */
@@ -58,7 +60,7 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     && req.headers['sec-fetch-dest'] === 'document'
 
   /** @param {http.IncomingMessage} req */
-  const trustedOrigin = (req) => isAllowedOrigin(req.headers.origin, origin)
+  const trustedOrigin = (req) => isAllowedOrigin(req.headers.origin, origin, advertised)
     && (isNavigation(req) || req.headers['sec-fetch-site'] !== 'cross-site')
 
   /** @param {http.IncomingMessage} req @param {http.ServerResponse} res */
@@ -162,16 +164,17 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
   })
   port = server.address().port
   origin = `${scheme}://${config.host}:${String(port)}`
+  advertised = config.publicUrl ?? origin
 
   return {
     server,
     tunnels,
     port,
     urlFor(token) {
-      return `${origin}/?t=${token}`
+      return `${advertised}/?t=${token}`
     },
     caUrl() {
-      return `${origin}/ca.crt`
+      return `${advertised}/ca.crt`
     },
     link() {
       const { token, expiresAt } = tokens.issue()

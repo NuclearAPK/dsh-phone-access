@@ -250,3 +250,28 @@ test('a redirected top-level page load from another app is allowed', async () =>
     await inner.close()
   }
 })
+
+test('links use the public url and its origin is accepted', async () => {
+  const inner = await startFakeInner()
+  const secret = randomSecret()
+  const publicUrl = 'https://dsh.example.com'
+  const phone2 = await createPhoneServer({
+    config: { host: '127.0.0.1', port: 0, cookieDays: 30, linkTtlMinutes: 10, publicUrl },
+    tls: { kind: 'off' },
+    getSecret: () => secret,
+    inner: { origin: inner.origin, auth: { ensure: async () => 'inner-cookie=1' } },
+  })
+  try {
+    assert.match(phone2.link().url, /^https:\/\/dsh\.example\.com\/\?t=/)
+    const entry = await request(phone2.port, `/?t=${phone2.link().token}`)
+    const cookie = cookieOf(entry)
+    const answer = await request(phone2.port, '/api/session/list', { cookie, origin: publicUrl })
+    assert.equal(answer.status, 200)
+    const foreign = await request(phone2.port, '/api/session/list', { cookie, origin: 'https://evil.example' })
+    assert.equal(foreign.status, 403)
+  } finally {
+    await phone2.close()
+    await inner.close()
+  }
+})
+

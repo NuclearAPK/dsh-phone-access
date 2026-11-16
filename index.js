@@ -33,9 +33,23 @@ export function resolveConfig(raw = {}) {
   if (!TLS_MODES.has(tls.mode)) {
     throw new Error(`phone-access: tls mode must be auto, files or off, not ${tls.mode}`)
   }
+  let publicUrl
+  if (raw.publicUrl !== undefined && raw.publicUrl !== null && raw.publicUrl !== '') {
+    let parsed
+    try {
+      parsed = new URL(String(raw.publicUrl))
+    } catch {
+      throw new Error(`phone-access: publicUrl must be an absolute http(s) url, not ${String(raw.publicUrl)}`)
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`phone-access: publicUrl must be http or https, not ${parsed.protocol}`)
+    }
+    publicUrl = parsed.origin
+  }
   return {
     host,
     port,
+    publicUrl,
     linkTtlMinutes: Number(raw.linkTtlMinutes ?? 10),
     cookieDays: Number(raw.cookieDays ?? 30),
     tls,
@@ -108,6 +122,7 @@ export async function apply(ctx, raw) {
       port: phone?.port ?? config.port,
       tlsMode: config.tls.mode,
       addresses,
+      publicUrl: config.publicUrl,
       listener: { caFingerprint: tls?.caFingerprint ?? null, tunnels: phone?.tunnels.size() ?? 0 },
     })
   }
@@ -221,15 +236,30 @@ export async function apply(ctx, raw) {
     return
   }
   try {
+    const hosts = [`IP:${config.host}`, `DNS:${os.hostname()}`, 'DNS:localhost', 'IP:127.0.0.1']
+    if (config.publicUrl) {
+      const publicHost = new URL(config.publicUrl).hostname
+      hosts.push(/^\d{1,3}(?:\.\d{1,3}){3}$/.test(publicHost) ? `IP:${publicHost}` : `DNS:${publicHost}`)
+    }
     tls = await ensureTls({
       mode: config.tls.mode,
       dir: tlsDir,
-      hosts: [`IP:${config.host}`, `DNS:${os.hostname()}`, 'DNS:localhost', 'IP:127.0.0.1'],
+      hosts,
       certFile: config.tls.certFile,
       keyFile: config.tls.keyFile,
     })
-    if (tls.kind === 'files' && !certificateCovers(tls.cert, [`IP:${config.host}`])) {
-      throw Object.assign(new Error(`certificate in ${String(config.tls.certFile)} has no SAN for ${config.host}`), { code: 'CERT_SAN' })
+    if (tls.kind === 'files') {
+      const required = [`IP:${config.host}`]
+      if (config.publicUrl) {
+        const publicHost = new URL(config.publicUrl).hostname
+        required.push(/^\d{1,3}(?:\.\d{1,3}){3}$/.test(publicHost) ? `IP:${publicHost}` : `DNS:${publicHost}`)
+      }
+      if (!certificateCovers(tls.cert, required)) {
+        throw Object.assign(
+          new Error(`certificate in ${String(config.tls.certFile)} has no SAN for ${required.join(', ')}`),
+          { code: 'CERT_SAN' },
+        )
+      }
     }
     secret = await ensureSecret(ctx.credentials)
     const innerOrigin = ctx.webServer.getOrigin()

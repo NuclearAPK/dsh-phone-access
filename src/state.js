@@ -49,6 +49,7 @@ export function describeState(input) {
     }
   }
   const scheme = tlsMode === 'off' ? 'http' : 'https'
+  const bindUrl = `${scheme}://${host}:${port}`
   return {
     state: 'listening',
     host,
@@ -56,6 +57,7 @@ export function describeState(input) {
     tlsMode,
     caFingerprint: listener?.caFingerprint ?? null,
     tunnels: listener?.tunnels ?? 0,
-    url: `${scheme}://${host}:${port}`,
+    url: input.publicUrl ?? bindUrl,
+    bindUrl,
   }
 }

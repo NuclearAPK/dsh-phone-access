@@ -19,12 +19,12 @@ const WITHHELD_RESPONSE = new Set([...HOP_BY_HOP, 'set-cookie'])
 
 /**
  * @param {string | undefined} origin
- * @param {string} publicOrigin
+ * @param {...string} allowed
  * @returns {boolean}
  */
-export function isAllowedOrigin(origin, publicOrigin) {
+export function isAllowedOrigin(origin, ...allowed) {
   if (origin === undefined || origin === '') return true
-  return origin === publicOrigin
+  return allowed.includes(origin)
 }
 
 /**

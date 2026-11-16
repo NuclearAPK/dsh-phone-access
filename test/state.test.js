@@ -40,3 +40,16 @@ test('describeState reports host-not-local as error', () => {
   assert.equal(state.reason, 'host-not-local')
   assert.deepEqual(state.addresses, ['192.168.1.237'])
 })
+
+test('describeState prefers the advertised public url', () => {
+  const state = describeState({
+    host: '192.168.1.237',
+    port: 3099,
+    tlsMode: 'auto',
+    addresses: ['192.168.1.237'],
+    publicUrl: 'https://dsh.example.com',
+    listener: { caFingerprint: null, tunnels: 0 },
+  })
+  assert.equal(state.url, 'https://dsh.example.com')
+  assert.equal(state.bindUrl, 'https://192.168.1.237:3099')
+})
