@@ -1,4 +1,5 @@
 import http from 'node:http'
+import net from 'node:net'
 import { forwardRequestHeaders, responseHeaderEntries } from './headers.js'
 
 /**
@@ -67,4 +68,30 @@ export async function forwardHttp(req, res, { innerOrigin, innerCookie }) {
     })
     req.pipe(upstream)
   })
+}
+
+/**
+ * Forward one HTTP upgrade (WebSocket) to the inner host, then splice the two
+ * sockets together and keep both in the tunnel registry.
+ * @param {http.IncomingMessage} req
+ * @param {import('node:net').Socket} socket
+ * @param {Buffer} head
+ * @param {{ innerOrigin: string, innerCookie: string, tunnels: { add(client: import('node:net').Socket, upstream: import('node:net').Socket): void } }} options
+ */
+export function forwardUpgrade(req, socket, head, { innerOrigin, innerCookie, tunnels }) {
+  const inner = new URL(innerOrigin)
+  const upstream = net.connect(Number(inner.port), inner.hostname, () => {
+    const headers = forwardRequestHeaders(req.headers, { innerOrigin, innerCookie, keepUpgrade: true })
+    const lines = [`${req.method ?? 'GET'} ${req.url ?? '/'} HTTP/1.1`]
+    for (const [name, value] of Object.entries(headers)) lines.push(`${name}: ${value}`)
+    upstream.write(`${lines.join('\r\n')}\r\n\r\n`)
+    if (head.length > 0) upstream.write(head)
+    socket.pipe(upstream).pipe(socket)
+  })
+  socket.setTimeout(0)
+  socket.setNoDelay(true)
+  upstream.setNoDelay(true)
+  upstream.on('error', () => socket.destroy())
+  socket.on('error', () => upstream.destroy())
+  tunnels.add(socket, upstream)
 }

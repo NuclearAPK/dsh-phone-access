@@ -30,16 +30,20 @@ export function isAllowedOrigin(origin, publicOrigin) {
 /**
  * Headers for the request the proxy sends to the inner host.
  * @param {Record<string, string | string[] | undefined>} headers
- * @param {{ innerOrigin: string, innerCookie: string }} target
+ * @param {{ innerOrigin: string, innerCookie: string, keepUpgrade?: boolean }} target
  * @returns {Record<string, string>}
  */
-export function forwardRequestHeaders(headers, { innerOrigin, innerCookie }) {
+export function forwardRequestHeaders(headers, { innerOrigin, innerCookie, keepUpgrade = false }) {
   /** @type {Record<string, string>} */
   const out = {}
   for (const [rawName, value] of Object.entries(headers)) {
     if (value === undefined) continue
     const name = rawName.toLowerCase()
-    if (HOP_BY_HOP.has(name) || REWRITTEN.has(name)) continue
+    if (REWRITTEN.has(name)) continue
+    if (HOP_BY_HOP.has(name)) {
+      if (keepUpgrade && (name === 'connection' || name === 'upgrade')) out[name] = Array.isArray(value) ? value.join(', ') : String(value)
+      continue
+    }
     out[name] = Array.isArray(value) ? value.join(', ') : String(value)
   }
   const inner = new URL(innerOrigin)
