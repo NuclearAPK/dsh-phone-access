@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "title": { "en": "Shmell DSH plugins", "ru": "Плагины Shmell для DSH" },
+  "description": {
+    "en": "Bundles for DeepSeek Harness built around the running Desktop host.",
+    "ru": "Бандлы для DeepSeek Harness, которые работают с уже запущенным Desktop-хостом."
+  },
+  "metadata": {
+    "categories": {
+      "remote": { "title": { "en": "Remote access", "ru": "Удалённый доступ" } }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "@local/dsh-phone-access",
+      "title": { "en": "Phone Access", "ru": "Доступ с телефона" },
+      "description": {
+        "en": "Open the running DSH web GUI on a phone: a second HTTPS listener, one-time link with QR, local CA and a revoke that also drops open streams.",
+        "ru": "Открывает веб-интерфейс запущенного DSH на телефоне: второй HTTPS-листенер, одноразовая ссылка с QR, локальный CA и отзыв, который закрывает и открытые потоки."
+      },
+      "author": "Vadim Fominykh",
+      "homepage": "https://github.com/NuclearAPK/dsh-phone-access",
+      "repository": { "url": "https://github.com/NuclearAPK/dsh-phone-access" },
+      "metadata": {
+        "category": "remote",
+        "keywords": ["dsh", "tls", "mobile", "qr", "phone"],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794845296,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/NuclearAPK/dsh-phone-access",
+            "commit": "45513faa8955e07023999a76e86f19d1c042eb15"
+          },
+          "engines": { "dsh": ">=0.2.2-rc.1 <0.3.0" }
+        }
+      ]
+    }
+  ]
+}
