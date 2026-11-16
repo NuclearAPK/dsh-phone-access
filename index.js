@@ -6,6 +6,7 @@ import { createPhoneServer } from './src/server.js'
 import { detectAddresses, describeState } from './src/state.js'
 import { certificateCovers, ensureTls } from './src/tls.js'
 import { qrSvg } from './src/qr.js'
+import { normalizePublicUrl, readPublicUrl, writePublicUrl } from './src/public-url.js'
 
 export const name = 'phone-access'
 export const inject = ['webServer', 'connection', 'credentials']
@@ -94,15 +95,23 @@ function writeJson(res, body, status = 200) {
   res.end(JSON.stringify(body))
 }
 
-/**
- * @param {import('@deepseek-ai/cordis').Context} ctx
+/** @param {string} host */
+function hostEntry(host) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) ? `IP:${host}` : `DNS:${host}`
+}
+
+/** @param {import('@deepseek-ai/cordis').Context} ctx
  * @param {Record<string, unknown>} raw
  */
 export async function apply(ctx, raw) {
   const config = resolveConfig(raw)
   const addresses = detectAddresses()
   const home = process.env.DSH_HOME ?? join(os.homedir(), '.dsh')
-  const tlsDir = join(home, 'phone-access', 'tls')
+  const settingsDir = join(home, 'phone-access')
+  const tlsDir = join(settingsDir, 'tls')
+
+  /** A value typed in the card wins over the profile config. */
+  let publicUrl = (await readPublicUrl(settingsDir).catch(() => undefined)) ?? config.publicUrl
 
   /** @type {Awaited<ReturnType<typeof createPhoneServer>> | undefined} */
   let phone
@@ -115,16 +124,22 @@ export async function apply(ctx, raw) {
     ctx.connection.requestRejection({ headers: request.headers })
 
   const status = () => {
-    if (failure) return describeState({ port: config.port, tlsMode: config.tls.mode, addresses, error: failure })
-    if (!config.host) return describeState({ port: config.port, tlsMode: config.tls.mode, addresses })
-    return describeState({
-      host: config.host,
-      port: phone?.port ?? config.port,
-      tlsMode: config.tls.mode,
-      addresses,
-      publicUrl: config.publicUrl,
-      listener: { caFingerprint: tls?.caFingerprint ?? null, tunnels: phone?.tunnels.size() ?? 0 },
-    })
+    const covers = publicUrl && tls?.kind === 'auto'
+      ? certificateCovers(tls.cert, [hostEntry(new URL(publicUrl).hostname)])
+      : null
+    const base = failure
+      ? describeState({ port: config.port, tlsMode: config.tls.mode, addresses, error: failure })
+      : !config.host
+        ? describeState({ port: config.port, tlsMode: config.tls.mode, addresses })
+        : describeState({
+          host: config.host,
+          port: phone?.port ?? config.port,
+          tlsMode: config.tls.mode,
+          addresses,
+          publicUrl,
+          listener: { caFingerprint: tls?.caFingerprint ?? null, tunnels: phone?.tunnels.size() ?? 0 },
+        })
+    return { ...base, publicUrl: publicUrl ?? null, certificateCoversPublicUrl: covers }
   }
 
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
@@ -189,6 +204,39 @@ export async function apply(ctx, raw) {
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
+    path: '/phone-access/public-url',
+    handler: (req, res) => {
+      if (guarded(req, res)) return
+      if (req.method !== 'POST') {
+        writeJson(res, { error: 'method-not-allowed' }, 405)
+        return
+      }
+      const value = new URL(req.url ?? '/', 'http://placeholder').searchParams.get('u')
+      let next
+      try {
+        next = normalizePublicUrl(value ?? '')
+      } catch (error) {
+        writeJson(res, { error: 'bad-url', message: error instanceof Error ? error.message : String(error) }, 400)
+        return
+      }
+      return writePublicUrl(settingsDir, next).then(
+        () => {
+          publicUrl = next
+          phone?.setPublicUrl(next)
+          const covers = tls?.kind === 'auto'
+            ? certificateCovers(tls.cert, [hostEntry(new URL(next).hostname)])
+            : null
+          writeJson(res, { url: next, certificateCoversPublicUrl: covers })
+        },
+        (error) => {
+          writeJson(res, { error: 'write-failed', message: String(error?.message ?? error) }, 500)
+        },
+      )
+    },
+  }))
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
     path: '/phone-access/link',
     handler: (req, res) => {
       if (guarded(req, res)) return
@@ -214,8 +262,7 @@ export async function apply(ctx, raw) {
         writeJson(res, { error: 'method-not-allowed' }, 405)
         return
       }
-      ensureSecret(ctx.credentials, true).then(
-        (rotated) => {
+      return ensureSecret(ctx.credentials, true).then(        (rotated) => {
           secret = rotated
           phone?.revoke()
           writeJson(res, { ok: true })
@@ -264,7 +311,7 @@ export async function apply(ctx, raw) {
     secret = await ensureSecret(ctx.credentials)
     const innerOrigin = ctx.webServer.getOrigin()
     phone = await createPhoneServer({
-      config,
+      config: { ...config, publicUrl: publicUrl ?? undefined },
       tls,
       getSecret: () => secret,
       inner: {
@@ -284,3 +331,5 @@ export async function apply(ctx, raw) {
     console.warn(`[phone-access] ${failure.reason}: ${failure.message}`)
   }
 }
+
+

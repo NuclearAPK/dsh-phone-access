@@ -78,6 +78,7 @@ test('apply registers the card routes and reports unconfigured without host', as
   assert.deepEqual(routes.map((route) => route.path).sort(), [
     '/phone-access/ca',
     '/phone-access/link',
+    '/phone-access/public-url',
     '/phone-access/qr',
     '/phone-access/qr/link',
     '/phone-access/revoke',
@@ -89,13 +90,13 @@ test('apply registers the card routes and reports unconfigured without host', as
   assert.ok(Array.isArray(body.addresses))
 })
 
-async function callHandler(handler, { method = 'POST', headers = {} } = {}) {
+async function callHandler(handler, { method = 'POST', headers = {} } = {}, url = '/phone-access/link') {
   const written = { status: 200, body: '' }
   const res = {
     writeHead(status) { written.status = status },
     end(body) { written.body = body ?? '' },
   }
-  await handler({ method, headers }, res)
+  await handler({ method, headers, url }, res)
   return { status: written.status, body: written.body === '' ? undefined : JSON.parse(written.body) }
 }
 
@@ -182,11 +183,12 @@ test('a rejected request never reaches the route body', async () => {
 test('route registrations are bound to effects and can be disposed', async () => {
   const { ctx, cleanups, removed } = stubCtx()
   await apply(ctx, { port: 3099 })
-  assert.equal(cleanups.length, 6, 'every route is registered inside ctx.effect')
+  assert.equal(cleanups.length, 7, 'every route is registered inside ctx.effect')
   for (const dispose of cleanups) dispose()
   assert.deepEqual(removed.sort(), [
     '/phone-access/ca',
     '/phone-access/link',
+    '/phone-access/public-url',
     '/phone-access/qr',
     '/phone-access/qr/link',
     '/phone-access/revoke',
@@ -219,3 +221,27 @@ test('resolveConfig accepts one public url and rejects anything else', () => {
   assert.throws(() => resolveConfig({ publicUrl: 'ftp://dsh.example.com' }), /publicUrl/)
   assert.throws(() => resolveConfig({ publicUrl: 'dsh.example.com' }), /publicUrl/)
 })
+
+test('the card can set the public url manually', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'phone-home-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const { ctx, routes } = stubCtx()
+    await apply(ctx, { port: 3099 })
+    const handler = routeOf(routes, '/phone-access/public-url').handler
+    const saved = await callHandler(handler, { method: 'POST' }, '/phone-access/public-url?u=dsh.shmell-tech.ru:3099')
+    assert.equal(saved.status, 200)
+    assert.equal(saved.body.url, 'https://dsh.shmell-tech.ru:3099')
+    const bad = await callHandler(handler, { method: 'POST' }, '/phone-access/public-url?u=ftp://x.example')
+    assert.equal(bad.status, 400)
+    const status = await (await routeOf(routes, '/phone-access/status').resource(
+      new Request('http://127.0.0.1:61110/phone-access/status'),
+    )).json()
+    assert.equal(status.publicUrl, 'https://dsh.shmell-tech.ru:3099')
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+  }
+})
+

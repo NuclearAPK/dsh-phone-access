@@ -275,3 +275,22 @@ test('links use the public url and its origin is accepted', async () => {
   }
 })
 
+
+test('setPublicUrl switches the advertised root at runtime', async () => {
+  const inner = await startFakeInner()
+  const { phone } = await startPhone(inner)
+  try {
+    phone.setPublicUrl('https://dsh.shmell-tech.ru:3099')
+    assert.match(phone.link().url, /^https:\/\/dsh\.shmell-tech\.ru:3099\/\?t=/)
+    const entry = await request(phone.port, `/?t=${phone.link().token}`)
+    const cookie = cookieOf(entry)
+    const answer = await request(phone.port, '/api/session/list', {
+      cookie,
+      origin: 'https://dsh.shmell-tech.ru:3099',
+    })
+    assert.equal(answer.status, 200)
+  } finally {
+    await phone.close()
+    await inner.close()
+  }
+})

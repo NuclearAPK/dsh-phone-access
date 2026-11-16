@@ -42,13 +42,32 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = React.useState(null)
       const [link, setLink] = React.useState(null)
       const [error, setError] = React.useState(null)
+      const [urlInput, setUrlInput] = React.useState('')
+      const [urlNote, setUrlNote] = React.useState(null)
 
       const refresh = React.useCallback(() => {
         fetch('/phone-access/status')
           .then((response) => response.json())
-          .then(setStatus)
+          .then((next) => {
+            setStatus(next)
+            setUrlInput(next.publicUrl ?? '')
+          })
           .catch((failure) => setError(String(failure)))
       }, [])
+
+      const saveUrl = async () => {
+        try {
+          setError(null)
+          const answer = await call(`/phone-access/public-url?u=${encodeURIComponent(urlInput)}`, 'POST')
+          setUrlNote(answer.certificateCoversPublicUrl === false
+            ? 'Сертификат не покрывает это имя: перезапустите DSH, чтобы выпустить новый.'
+            : null)
+          setLink(null)
+          refresh()
+        } catch (failure) {
+          setError(String(failure.message ?? failure))
+        }
+      }
 
       React.useEffect(() => {
         refresh()
@@ -102,6 +121,21 @@ window.__ModuleLoader__.load({
             status.bindUrl && status.bindUrl !== status.url
               ? h('p', { style: styles.muted }, `Слушает: ${status.bindUrl} · ссылки ведут на внешний адрес`)
               : null,
+            h('div', { style: styles.wrap },
+              h('label', null, 'Внешний адрес для ссылок и QR'),
+              h('div', { style: styles.row },
+                h('input', {
+                  value: urlInput,
+                  onChange: (event) => setUrlInput(event.target.value),
+                  placeholder: 'dsh.example.com:3099',
+                  style: { ...styles.button, minWidth: 260, cursor: 'text' },
+                }),
+                h('button', { type: 'button', style: styles.button, onClick: saveUrl }, 'Сохранить'),
+              ),
+              h('p', { style: styles.muted },
+                status.publicUrl ? `Сейчас: ${status.publicUrl}` : 'Сейчас: адрес слушателя. Можно вписать домен или адрес туннеля.'),
+              urlNote ? h('p', { style: styles.error }, urlNote) : null,
+            ),
             status.caFingerprint
               ? h('pre', { style: styles.code }, `CA SHA-256: ${status.caFingerprint}`)
               : null,
