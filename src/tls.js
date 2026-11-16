@@ -55,28 +55,54 @@ export function certificateCovers(certPem, hosts) {
   })
 }
 
-async function generate({ dir, hosts }) {
-  const caKeys = await webcrypto.subtle.generateKey(ALGORITHM, true, ['sign', 'verify'])
-  const notBefore = new Date(Date.now() - 60_000)
-  const caCert = await x509.X509CertificateGenerator.createSelfSigned({
+function pemToDer(text) {
+  return Buffer.from(text.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64')
+}
+
+/**
+ * The CA the phone trusts: created once, reused when a leaf is reissued for a
+ * new address, so an already installed CA keeps working.
+ * @param {string} dir
+ */
+async function loadOrCreateCa(dir) {
+  const caPath = join(dir, FILE.ca)
+  const keyPath = join(dir, FILE.caKey)
+  if (existsSync(caPath) && existsSync(keyPath)) {
+    return {
+      cert: new x509.X509Certificate(readFileSync(caPath, 'utf8')),
+      key: await webcrypto.subtle.importKey('pkcs8', pemToDer(readFileSync(keyPath, 'utf8')), ALGORITHM, true, ['sign']),
+    }
+  }
+  const keys = await webcrypto.subtle.generateKey(ALGORITHM, true, ['sign', 'verify'])
+  const cert = await x509.X509CertificateGenerator.createSelfSigned({
     serialNumber: '01',
     name: 'CN=DSH Phone Access CA',
-    notBefore,
+    notBefore: new Date(Date.now() - 60_000),
     notAfter: new Date(Date.now() + CA_DAYS * 86_400_000),
     signingAlgorithm: SIGNING,
-    keys: caKeys,
+    keys,
     extensions: [new x509.BasicConstraintsExtension(true, undefined, true)],
   })
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(caPath, cert.toString('pem'))
+  writeFileSync(keyPath, await exportKey(keys.privateKey), { mode: 0o600 })
+  return { cert, key: keys.privateKey }
+}
+
+async function generate({ dir, hosts }) {
+  mkdirSync(dir, { recursive: true })
+  const ca = await loadOrCreateCa(dir)
+  const notBefore = new Date(Date.now() - 60_000)
   const leafKeys = await webcrypto.subtle.generateKey(ALGORITHM, true, ['sign', 'verify'])
   const leafCert = await x509.X509CertificateGenerator.create({
     serialNumber: '02',
     subject: `CN=${hosts[0] ?? 'dsh-phone'}`,
-    issuer: caCert.subject,
+    issuer: ca.cert.subject,
     notBefore,
     notAfter: new Date(Date.now() + LEAF_DAYS * 86_400_000),
     signingAlgorithm: SIGNING,
     publicKey: leafKeys.publicKey,
-    signingKey: caKeys.privateKey,
+    signingKey: ca.key,
     extensions: [
       new x509.BasicConstraintsExtension(false, undefined, true),
       new x509.KeyUsagesExtension(
@@ -91,18 +117,15 @@ async function generate({ dir, hosts }) {
       ),
     ],
   })
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, FILE.ca), caCert.toString('pem'))
-  writeFileSync(join(dir, FILE.caKey), await exportKey(caKeys.privateKey))
   writeFileSync(join(dir, FILE.leaf), leafCert.toString('pem'))
-  writeFileSync(join(dir, FILE.leafKey), await exportKey(leafKeys.privateKey))
+  writeFileSync(join(dir, FILE.leafKey), await exportKey(leafKeys.privateKey), { mode: 0o600 })
   writeFileSync(join(dir, FILE.meta), JSON.stringify({ hosts }, null, 2))
   return {
     kind: 'auto',
     cert: leafCert.toString('pem'),
     key: await exportKey(leafKeys.privateKey),
-    ca: caCert.toString('pem'),
-    caFingerprint: await thumbprint(caCert),
+    ca: ca.cert.toString('pem'),
+    caFingerprint: await thumbprint(ca.cert),
     hosts,
   }
 }

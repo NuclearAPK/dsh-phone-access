@@ -89,12 +89,38 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
       res.end(error instanceof Error ? error.message : String(error))
       return
     }
-    await forwardHttp(req, res, { innerOrigin: inner.origin, innerCookie })
+    // A stale inner cookie is refreshed once for a body-less request: a request
+    // with a body cannot be replayed, so its 401 passes through.
+    const replayable = req.method === 'GET' || req.method === 'HEAD'
+    let retried = false
+    for (;;) {
+      let aborted = false
+      await forwardHttp(req, res, {
+        innerOrigin: inner.origin,
+        innerCookie,
+        beforeWrite: (statusCode) => {
+          if (statusCode !== 401 || !replayable || retried) return false
+          retried = true
+          aborted = true
+          return true
+        },
+      })
+      if (!aborted) return
+      inner.auth.invalidate()
+      innerCookie = await inner.auth.ensure()
+    }
   }
 
   const server = secure
     ? https.createServer({ cert: tls.cert, key: tls.key }, handle)
     : http.createServer(handle)
+
+  /** Every open TCP connection, so revocation also ends plain HTTP exchanges. */
+  const sockets = new Set()
+  server.on('connection', (socket) => {
+    sockets.add(socket)
+    socket.on('close', () => sockets.delete(socket))
+  })
 
   server.on('upgrade', (req, socket, head) => {
     if (!trustedOrigin(req) || !admitted(req)) {
@@ -137,6 +163,8 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     revoke() {
       tokens.clear()
       tunnels.closeAll()
+      for (const socket of sockets) socket.destroy()
+      sockets.clear()
     },
     async close() {
       tunnels.closeAll()
@@ -146,3 +174,4 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     },
   }
 }
+

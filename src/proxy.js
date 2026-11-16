@@ -32,9 +32,9 @@ export function createInnerAuth({ origin, fetchImpl = fetch }) {
  * Forward one HTTP request to the inner host and write its response back.
  * @param {http.IncomingMessage} req
  * @param {http.ServerResponse} res
- * @param {{ innerOrigin: string, innerCookie: string }} target
+ * @param {{ innerOrigin: string, innerCookie: string, beforeWrite?: (statusCode: number) => boolean }} target
  */
-export async function forwardHttp(req, res, { innerOrigin, innerCookie }) {
+export async function forwardHttp(req, res, { innerOrigin, innerCookie, beforeWrite }) {
   const inner = new URL(innerOrigin)
   const headers = forwardRequestHeaders(req.headers, { innerOrigin, innerCookie })
   await new Promise((resolve) => {
@@ -47,6 +47,12 @@ export async function forwardHttp(req, res, { innerOrigin, innerCookie }) {
         headers,
       },
       (innerRes) => {
+        if (beforeWrite?.(innerRes.statusCode ?? 0)) {
+          innerRes.destroy()
+          upstream.destroy()
+          resolve()
+          return
+        }
         const entries = responseHeaderEntries(innerRes.rawHeaders)
         res.writeHead(innerRes.statusCode ?? 502, Object.fromEntries(entries))
         innerRes.pipe(res)
@@ -95,3 +101,4 @@ export function forwardUpgrade(req, socket, head, { innerOrigin, innerCookie, tu
   socket.on('error', () => upstream.destroy())
   tunnels.add(socket, upstream)
 }
+

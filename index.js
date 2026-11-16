@@ -4,7 +4,7 @@ import { randomSecret } from './src/cookie.js'
 import { createInnerAuth } from './src/proxy.js'
 import { createPhoneServer } from './src/server.js'
 import { detectAddresses, describeState } from './src/state.js'
-import { ensureTls } from './src/tls.js'
+import { certificateCovers, ensureTls } from './src/tls.js'
 
 export const name = 'phone-access'
 export const inject = ['webServer', 'connection', 'credentials']
@@ -41,7 +41,7 @@ export function resolveConfig(raw = {}) {
   }
 }
 
-/** @param {string} value */
+/** @param {unknown} record */
 function secretOf(record) {
   if (record?.kind !== 'grant') return undefined
   const secret = record.payload?.secret
@@ -70,6 +70,15 @@ function jsonResponse(body, status = 200) {
   })
 }
 
+/** @param {import('node:http').ServerResponse} res */
+function writeJson(res, body, status = 200) {
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  })
+  res.end(JSON.stringify(body))
+}
+
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
  * @param {Record<string, unknown>} raw
@@ -83,8 +92,12 @@ export async function apply(ctx, raw) {
   /** @type {Awaited<ReturnType<typeof createPhoneServer>> | undefined} */
   let phone
   let tls
+  /** @type {{ reason: string, message: string } | undefined} */
   let failure
   let secret
+
+  const reject = (/** @type {{ headers: unknown }} */ request) =>
+    ctx.connection.requestRejection({ headers: request.headers })
 
   const status = () => {
     if (failure) return describeState({ port: config.port, tlsMode: config.tls.mode, addresses, error: failure })
@@ -98,36 +111,79 @@ export async function apply(ctx, raw) {
     })
   }
 
-  ctx.webServer.register({
+  /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
+  const guarded = (req, res) => {
+    const rejection = reject(req)
+    if (rejection === undefined) return false
+    res.writeHead(rejection)
+    res.end()
+    return true
+  }
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
     path: '/phone-access/status',
-    resource: () => jsonResponse(status()),
-  })
-  ctx.webServer.register({
-    path: '/phone-access/link',
     resource: (request) => {
-      if (request.method !== 'POST') return jsonResponse({ error: 'method-not-allowed' }, 405)
-      if (!phone) return jsonResponse({ error: 'not-configured', status: status() }, 409)
-      const link = phone.link()
-      return jsonResponse({ url: link.url, expiresAt: link.expiresAt })
+      const rejection = reject(request)
+      if (rejection !== undefined) return new Response(null, { status: rejection })
+      return jsonResponse(status())
     },
-  })
-  ctx.webServer.register({
-    path: '/phone-access/revoke',
-    resource: async (request) => {
-      if (request.method !== 'POST') return jsonResponse({ error: 'method-not-allowed' }, 405)
-      secret = await ensureSecret(ctx.credentials, true)
-      phone?.revoke()
-      return jsonResponse({ ok: true })
-    },
-  })
-  ctx.webServer.register({
+  }))
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
     path: '/phone-access/ca',
-    resource: () => {
+    resource: (request) => {
+      const rejection = reject(request)
+      if (rejection !== undefined) return new Response(null, { status: rejection })
       if (!tls?.ca) return jsonResponse({ error: 'no-ca' }, 404)
       return new Response(tls.ca, { headers: { 'content-type': 'application/x-pem-file' } })
     },
-  })
+  }))
 
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/phone-access/link',
+    handler: (req, res) => {
+      if (guarded(req, res)) return
+      if (req.method !== 'POST') {
+        writeJson(res, { error: 'method-not-allowed' }, 405)
+        return
+      }
+      if (!phone) {
+        writeJson(res, { error: 'not-configured', status: status() }, 409)
+        return
+      }
+      const link = phone.link()
+      writeJson(res, { url: link.url, expiresAt: link.expiresAt })
+    },
+  }))
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/phone-access/revoke',
+    handler: (req, res) => {
+      if (guarded(req, res)) return
+      if (req.method !== 'POST') {
+        writeJson(res, { error: 'method-not-allowed' }, 405)
+        return
+      }
+      ensureSecret(ctx.credentials, true).then(
+        (rotated) => {
+          secret = rotated
+          phone?.revoke()
+          writeJson(res, { ok: true })
+        },
+        (error) => {
+          writeJson(res, { error: 'credential-failed', message: String(error?.message ?? error) }, 500)
+        },
+      )
+    },
+  }))
+
+  if (config.tls.mode === 'off') {
+    console.warn('[phone-access] tls.mode is off: the phone cookie travels in clear text; use it only for debugging')
+  }
   if (!config.host) return
   if (addresses.length > 0 && !addresses.includes(config.host)) {
     failure = { reason: 'host-not-local', message: `address ${config.host} is not one of this machine's IPv4 addresses` }
@@ -137,10 +193,13 @@ export async function apply(ctx, raw) {
     tls = await ensureTls({
       mode: config.tls.mode,
       dir: tlsDir,
-      hosts: [`IP:${config.host}`, 'DNS:localhost', 'IP:127.0.0.1'],
+      hosts: [`IP:${config.host}`, `DNS:${os.hostname()}`, 'DNS:localhost', 'IP:127.0.0.1'],
       certFile: config.tls.certFile,
       keyFile: config.tls.keyFile,
     })
+    if (tls.kind === 'files' && !certificateCovers(tls.cert, [`IP:${config.host}`])) {
+      throw Object.assign(new Error(`certificate in ${String(config.tls.certFile)} has no SAN for ${config.host}`), { code: 'CERT_SAN' })
+    }
     secret = await ensureSecret(ctx.credentials)
     const innerOrigin = ctx.webServer.getOrigin()
     phone = await createPhoneServer({
@@ -156,9 +215,11 @@ export async function apply(ctx, raw) {
       void phone?.close()
     })
   } catch (error) {
+    const code = error?.code
     failure = {
-      reason: error?.code === 'EADDRINUSE' ? 'port-in-use' : 'tls-failed',
+      reason: code === 'EADDRINUSE' ? 'port-in-use' : code === 'CERT_SAN' ? 'cert-san' : 'start-failed',
       message: error instanceof Error ? error.message : String(error),
     }
+    console.warn(`[phone-access] ${failure.reason}: ${failure.message}`)
   }
 }

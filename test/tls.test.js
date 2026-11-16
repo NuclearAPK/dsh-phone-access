@@ -22,7 +22,7 @@ test('second call reuses the material and a new host regenerates it', async () =
   const again = await ensureTls({ mode: 'auto', dir, hosts: ['IP:192.168.1.237'] })
   assert.equal(again.caFingerprint, first.caFingerprint)
   const moved = await ensureTls({ mode: 'auto', dir, hosts: ['IP:192.168.1.237', 'IP:10.20.22.131'] })
-  assert.notEqual(moved.caFingerprint, first.caFingerprint)
+  assert.equal(moved.caFingerprint, first.caFingerprint, 'a new leaf must keep the CA the phone already trusts')
   assert.equal(certificateCovers(moved.cert, ['IP:10.20.22.131']), true)
 })
 
@@ -39,3 +39,4 @@ test('files mode reads given files and off mode returns off', async () => {
   const off = await ensureTls({ mode: 'off', dir, hosts: [] })
   assert.deepEqual(off, { kind: 'off' })
 })
+

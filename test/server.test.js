@@ -61,7 +61,7 @@ function cookieOf(response) {
 async function waitFor(predicate, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (predicate()) return
+    if (await predicate()) return
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
   throw new Error('waitFor: condition not met')
@@ -153,3 +153,63 @@ test('revoke closes open tunnels', async () => {
     await inner.close()
   }
 })
+
+test('revoke closes idle keep-alive connections', async () => {
+  const inner = await startFakeInner()
+  const { phone } = await startPhone(inner)
+  const agent = new http.Agent({ keepAlive: true })
+  const connections = () => new Promise((resolve) => phone.server.getConnections((_error, count) => { resolve(count) }))
+  try {
+    const entry = await request(phone.port, `/?t=${phone.link().token}`)
+    const cookie = cookieOf(entry)
+    await new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port: phone.port, path: '/api/session/list', headers: { cookie }, agent }, (res) => {
+        res.resume()
+        res.on('end', resolve)
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    assert.ok(await connections() >= 1, 'keep-alive connection is open')
+    phone.revoke()
+    await waitFor(async () => (await connections()) === 0)
+  } finally {
+    agent.destroy()
+    await phone.close()
+    await inner.close()
+  }
+})
+
+test('a stale inner cookie is refreshed once on 401', async () => {
+  const stale = http.createServer((req, res) => {
+    if (req.headers.cookie === 'fresh') {
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end('ok')
+      return
+    }
+    res.writeHead(401, { 'content-type': 'text/plain' })
+    res.end('stale cookie')
+  })
+  await new Promise((resolve) => stale.listen(0, '127.0.0.1', resolve))
+  let cookie = 'stale'
+  const auth = {
+    async ensure() { return cookie },
+    invalidate() { cookie = 'fresh' },
+  }
+  const phone = await createPhoneServer({
+    config: { host: '127.0.0.1', port: 0, cookieDays: 30, linkTtlMinutes: 10 },
+    tls: { kind: 'off' },
+    getSecret: () => 'secret-secret-secret-secret-secret',
+    inner: { origin: `http://127.0.0.1:${String(stale.address().port)}`, auth },
+  })
+  try {
+    const entry = await request(phone.port, `/?t=${phone.link().token}`)
+    const cookieHeader = cookieOf(entry)
+    const answer = await request(phone.port, '/api/session/list', { cookie: cookieHeader })
+    assert.notEqual(answer.status, 401, 'the proxy must retry with a fresh inner cookie')
+  } finally {
+    await phone.close()
+    await new Promise((resolve) => stale.close(resolve))
+  }
+})
+
