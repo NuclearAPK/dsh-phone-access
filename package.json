@@ -1,7 +1,8 @@
 {
   "name": "@local/dsh-phone-access",
   "version": "0.1.0",
-  "private": false,`n  "license": "MIT",
+  "private": false,
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./index.js",
