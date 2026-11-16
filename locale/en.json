@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Phone Access",
+    "description": "Open the running DSH web GUI on a phone over TLS. Settings → Phone shows the listener, a CA download with a QR code and one-time sign-in links with their own QR; the phone gets the same sessions, prompts, approvals and files as the desktop window. Revoke rotates the cookie secret and closes open tunnels. The plugin listens on one local address only and never proxies to a second DSH host; the phone holds full owner rights, so share links only on a trusted network.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,12 +1,14 @@
 {
   "name": "@local/dsh-phone-access",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "license": "MIT",
+  "icon": "./icon.svg",
   "type": "module",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
@@ -15,7 +17,10 @@
     "src",
     "cordis.patch.yml",
     "README.md",
-    "site"
+    "site",
+    "icon.svg",
+    "docs",
+    "locale/*.json"
   ],
   "scripts": {
     "test": "node --test"
@@ -34,5 +39,6 @@
     "qrcode-generator": "^2.0.4"
   }
 }
+
 
 
