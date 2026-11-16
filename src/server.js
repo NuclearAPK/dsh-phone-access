@@ -86,7 +86,7 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
       innerCookie = await inner.auth.ensure()
     } catch (error) {
       res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' })
-      res.end(`phone-access: ${error instanceof Error ? error.message : String(error)}`)
+      res.end(error instanceof Error ? error.message : String(error))
       return
     }
     await forwardHttp(req, res, { innerOrigin: inner.origin, innerCookie })

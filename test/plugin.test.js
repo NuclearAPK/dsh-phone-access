@@ -1,11 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { apply, resolveConfig } from '../index.js'
+import { detectAddresses } from '../src/state.js'
 
 function stubCtx() {
   const routes = []
   const cleanups = []
   const store = { value: undefined }
+  const authenticated = []
   const ctx = {
     webServer: {
       getOrigin: () => 'http://127.0.0.1:61110',
@@ -14,7 +20,12 @@ function stubCtx() {
         return () => {}
       },
     },
-    connection: { authenticatedUrl: (url) => `${url}?token=t` },
+    connection: {
+      authenticatedUrl(url) {
+        authenticated.push(url)
+        return `${url}?token=t`
+      },
+    },
     credentials: {
       async modifyRecord(_key, mutate) {
         store.value = await mutate(store.value)
@@ -26,7 +37,15 @@ function stubCtx() {
     },
     on() {},
   }
-  return { ctx, routes, store }
+  return { ctx, routes, store, authenticated, cleanups }
+}
+
+async function freePort() {
+  const server = createServer()
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address()
+  await new Promise((resolve) => server.close(resolve))
+  return port
 }
 
 function routeOf(routes, path) {
@@ -75,4 +94,34 @@ test('link is refused while unconfigured', async () => {
   assert.equal(response.status, 409)
   const body = await response.json()
   assert.equal(body.error, 'not-configured')
+})
+
+test('apply starts the listener on a local address and authenticates to the inner host', async (t) => {
+  const addresses = detectAddresses()
+  if (addresses.length === 0) {
+    t.skip('no non-loopback IPv4 address to bind')
+    return
+  }
+  const home = await mkdtemp(join(tmpdir(), 'phone-home-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const { ctx, routes, authenticated, cleanups } = stubCtx()
+    const port = await freePort()
+    await apply(ctx, { host: addresses[0], port, tls: { mode: 'auto' } })
+    const status = await (await routes.find((route) => route.path === '/phone-access/status').resource(
+      new Request('http://127.0.0.1:61110/phone-access/status'),
+    )).json()
+    assert.equal(status.state, 'listening')
+    assert.equal(status.url, `https://${addresses[0]}:${String(port)}`)
+    assert.deepEqual(authenticated, ['http://127.0.0.1:61110'])
+    const link = await (await routes.find((route) => route.path === '/phone-access/link').resource(
+      new Request('http://127.0.0.1:61110/phone-access/link', { method: 'POST' }),
+    )).json()
+    assert.match(link.url, new RegExp(`^https://${addresses[0].replaceAll('.', '\\.')}:${String(port)}/\\?t=`))
+    for (const cleanup of cleanups) await cleanup()
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+  }
 })

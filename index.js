@@ -147,7 +147,10 @@ export async function apply(ctx, raw) {
       config,
       tls,
       getSecret: () => secret,
-      inner: { origin: innerOrigin, auth: createInnerAuth({ origin: innerOrigin }) },
+      inner: {
+        origin: innerOrigin,
+        auth: createInnerAuth({ origin: ctx.connection.authenticatedUrl(innerOrigin) }),
+      },
     })
     ctx.effect(() => () => {
       void phone?.close()
