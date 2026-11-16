@@ -123,6 +123,17 @@ window.__ModuleLoader__.load({
                 h('p', { style: styles.muted }, 'Ссылка одноразовая. На телефоне сначала установите CA, потом откройте ссылку.'),
                 h('pre', { style: styles.code }, link.url),
                 h('div', { style: styles.row },
+                  h('img', {
+                    src: `/phone-access/qr/link?t=${encodeURIComponent(new URL(link.url).searchParams.get('t') ?? '')}`,
+                    alt: 'QR-код: войти с телефона',
+                    width: 168,
+                    height: 168,
+                    style: { background: '#fff', padding: 6, borderRadius: 8 },
+                  }),
+                  h('p', { style: styles.muted },
+                    'Наведите камеру телефона на QR — откроется вход. Ссылка одноразовая, живёт 10 минут; для нового телефона нажмите «Показать ссылку» ещё раз.'),
+                ),
+                h('div', { style: styles.row },
                   h('a', { style: styles.button, href: link.url, target: '_blank', rel: 'noreferrer' }, 'Открыть ссылку на этом ПК'),
                   h('button', {
                     type: 'button',

@@ -79,6 +79,7 @@ test('apply registers the card routes and reports unconfigured without host', as
     '/phone-access/ca',
     '/phone-access/link',
     '/phone-access/qr',
+    '/phone-access/qr/link',
     '/phone-access/revoke',
     '/phone-access/status',
   ])
@@ -130,6 +131,16 @@ test('apply starts the listener on a local address and authenticates to the inne
       assert.equal(qr.status, 200)
       assert.match(qr.headers.get('content-type'), /svg/)
       assert.match(await qr.text(), /<svg/)
+      const token = 'a'.repeat(43)
+      const linkQr = await routeOf(routes, '/phone-access/qr/link').resource(
+        new Request('http://127.0.0.1:61110/phone-access/qr/link?t=' + token),
+      )
+      assert.equal(linkQr.status, 200)
+      assert.match(await linkQr.text(), /<svg/)
+      const badQr = await routeOf(routes, '/phone-access/qr/link').resource(
+        new Request('http://127.0.0.1:61110/phone-access/qr/link?t=short'),
+      )
+      assert.equal(badQr.status, 400)
       const link = await callHandler(routeOf(routes, '/phone-access/link').handler)
       assert.match(link.body.url, new RegExp(`^https://${addresses[0].replaceAll('.', '\\.')}:${String(port)}/\\?t=`))
     } finally {
@@ -171,12 +182,13 @@ test('a rejected request never reaches the route body', async () => {
 test('route registrations are bound to effects and can be disposed', async () => {
   const { ctx, cleanups, removed } = stubCtx()
   await apply(ctx, { port: 3099 })
-  assert.equal(cleanups.length, 5, 'every route is registered inside ctx.effect')
+  assert.equal(cleanups.length, 6, 'every route is registered inside ctx.effect')
   for (const dispose of cleanups) dispose()
   assert.deepEqual(removed.sort(), [
     '/phone-access/ca',
     '/phone-access/link',
     '/phone-access/qr',
+    '/phone-access/qr/link',
     '/phone-access/revoke',
     '/phone-access/status',
   ])
@@ -189,5 +201,14 @@ test('qr route is refused while unconfigured', async () => {
     new Request('http://127.0.0.1:61110/phone-access/qr'),
   )
   assert.equal(response.status, 409)
+})
+
+
+test('qr for the login link validates the token shape', async () => {
+  const { ctx, routes } = stubCtx()
+  await apply(ctx, { port: 3099 })
+  const route = routeOf(routes, '/phone-access/qr/link')
+  const missing = await route.resource(new Request('http://127.0.0.1:61110/phone-access/qr/link'))
+  assert.equal(missing.status, 409)
 })
 

@@ -157,6 +157,23 @@ export async function apply(ctx, raw) {
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
+    path: '/phone-access/qr/link',
+    resource: (request) => {
+      const rejection = reject(request)
+      if (rejection !== undefined) return new Response(null, { status: rejection })
+      if (!phone) return jsonResponse({ error: 'not-configured' }, 409)
+      const token = new URL(request.url).searchParams.get('t')
+      if (token === null || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+        return jsonResponse({ error: 'bad-token' }, 400)
+      }
+      return new Response(qrSvg(phone.urlFor(token)), {
+        headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' },
+      })
+    },
+  }))
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
     path: '/phone-access/link',
     handler: (req, res) => {
       if (guarded(req, res)) return
