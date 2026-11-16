@@ -29,7 +29,18 @@
         "labels": [],
         "sortKeys": {}
       },
+      "icon": "https://raw.githubusercontent.com/NuclearAPK/dsh-phone-access/master/icon.svg",
       "versions": [
+        {
+          "version": "0.1.1",
+          "publishTimestamp": 1794845563,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/NuclearAPK/dsh-phone-access",
+            "commit": "8e7088135938c22ebece44a117a1f0016ddfc44a"
+          },
+          "engines": { "dsh": ">=0.2.2-rc.1 <0.3.0" }
+        },
         {
           "version": "0.1.0",
           "publishTimestamp": 1794845296,
