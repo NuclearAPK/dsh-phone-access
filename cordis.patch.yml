@@ -1,0 +1,5 @@
+- insert:
+    - id: phone-access
+      name: '@local/dsh-phone-access'
+      config:
+        port: 3099
