@@ -161,6 +161,9 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     urlFor(token) {
       return `${origin}/?t=${token}`
     },
+    caUrl() {
+      return `${origin}/ca.crt`
+    },
     link() {
       const { token, expiresAt } = tokens.issue()
       return { token, expiresAt, url: this.urlFor(token) }

@@ -28,6 +28,7 @@
     }
   },
   "dependencies": {
-    "@peculiar/x509": "^1.14.3"
+    "@peculiar/x509": "^1.14.3",
+    "qrcode-generator": "^2.0.4"
   }
 }

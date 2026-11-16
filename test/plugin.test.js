@@ -78,6 +78,7 @@ test('apply registers the card routes and reports unconfigured without host', as
   assert.deepEqual(routes.map((route) => route.path).sort(), [
     '/phone-access/ca',
     '/phone-access/link',
+    '/phone-access/qr',
     '/phone-access/revoke',
     '/phone-access/status',
   ])
@@ -125,6 +126,10 @@ test('apply starts the listener on a local address and authenticates to the inne
       assert.equal(status.state, 'listening')
       assert.equal(status.url, `https://${addresses[0]}:${String(port)}`)
       assert.deepEqual(authenticated, ['http://127.0.0.1:61110'])
+      const qr = await routeOf(routes, '/phone-access/qr').resource(new Request('http://127.0.0.1:61110/phone-access/qr'))
+      assert.equal(qr.status, 200)
+      assert.match(qr.headers.get('content-type'), /svg/)
+      assert.match(await qr.text(), /<svg/)
       const link = await callHandler(routeOf(routes, '/phone-access/link').handler)
       assert.match(link.body.url, new RegExp(`^https://${addresses[0].replaceAll('.', '\\.')}:${String(port)}/\\?t=`))
     } finally {
@@ -166,12 +171,23 @@ test('a rejected request never reaches the route body', async () => {
 test('route registrations are bound to effects and can be disposed', async () => {
   const { ctx, cleanups, removed } = stubCtx()
   await apply(ctx, { port: 3099 })
-  assert.equal(cleanups.length, 4, 'every route is registered inside ctx.effect')
+  assert.equal(cleanups.length, 5, 'every route is registered inside ctx.effect')
   for (const dispose of cleanups) dispose()
   assert.deepEqual(removed.sort(), [
     '/phone-access/ca',
     '/phone-access/link',
+    '/phone-access/qr',
     '/phone-access/revoke',
     '/phone-access/status',
   ])
 })
+
+test('qr route is refused while unconfigured', async () => {
+  const { ctx, routes } = stubCtx()
+  await apply(ctx, { port: 3099 })
+  const response = await routeOf(routes, '/phone-access/qr').resource(
+    new Request('http://127.0.0.1:61110/phone-access/qr'),
+  )
+  assert.equal(response.status, 409)
+})
+

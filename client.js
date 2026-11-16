@@ -107,6 +107,17 @@ window.__ModuleLoader__.load({
               h('a', { style: styles.button, href: '/phone-access/ca', download: 'dsh-phone-ca.pem' }, 'Скачать CA'),
               h('button', { type: 'button', style: styles.button, onClick: revoke }, 'Отозвать все'),
             ),
+            h('div', { style: styles.row },
+              h('img', {
+                src: '/phone-access/qr',
+                alt: 'QR-код: скачать сертификат CA',
+                width: 168,
+                height: 168,
+                style: { background: '#fff', padding: 6, borderRadius: 8 },
+              }),
+              h('p', { style: styles.muted },
+                'Наведите камеру телефона на QR — откроется файл сертификата. Установите его как сертификат ЦС, затем повторите со ссылкой из «Показать ссылку».'),
+            ),
             link
               ? h('div', { style: styles.wrap },
                 h('p', { style: styles.muted }, 'Ссылка одноразовая. На телефоне сначала установите CA, потом откройте ссылку.'),

@@ -5,6 +5,7 @@ import { createInnerAuth } from './src/proxy.js'
 import { createPhoneServer } from './src/server.js'
 import { detectAddresses, describeState } from './src/state.js'
 import { certificateCovers, ensureTls } from './src/tls.js'
+import { qrSvg } from './src/qr.js'
 
 export const name = 'phone-access'
 export const inject = ['webServer', 'connection', 'credentials']
@@ -138,6 +139,19 @@ export async function apply(ctx, raw) {
       if (rejection !== undefined) return new Response(null, { status: rejection })
       if (!tls?.ca) return jsonResponse({ error: 'no-ca' }, 404)
       return new Response(tls.ca, { headers: { 'content-type': 'application/x-pem-file' } })
+    },
+  }))
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/phone-access/qr',
+    resource: (request) => {
+      const rejection = reject(request)
+      if (rejection !== undefined) return new Response(null, { status: rejection })
+      if (!phone) return jsonResponse({ error: 'not-configured' }, 409)
+      return new Response(qrSvg(phone.caUrl()), {
+        headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' },
+      })
     },
   }))
 
