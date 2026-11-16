@@ -5,8 +5,13 @@ import { isAllowedOrigin } from './headers.js'
 import { forwardHttp, forwardUpgrade } from './proxy.js'
 import { createTunnelRegistry } from './tunnels.js'
 
-const DENIED_PAGE = '<!doctype html><meta charset="utf-8"><title>DSH phone access</title>'
-  + '<p>Откройте ссылку из карточки «Телефон» на компьютере.</p>'
+const DENIED_AUTH = '<!doctype html><meta charset="utf-8"><title>DSH phone access</title>'
+  + '<p>В этом браузере нет входа: нужна ссылка из карточки «Телефон» на компьютере.</p>'
+  + '<p>Нажмите «Показать ссылку» и откройте выданную ссылку целиком, вместе с <code>?t=…</code>.</p>'
+
+const DENIED_TOKEN = '<!doctype html><meta charset="utf-8"><title>DSH phone access</title>'
+  + '<p>Ссылка недействительна: она одноразовая и живёт 10 минут.</p>'
+  + '<p>Нажмите «Показать ссылку» в карточке «Телефон» ещё раз и откройте новую ссылку.</p>'
 
 /** @param {string | undefined} header */
 function cookieValue(header) {
@@ -59,7 +64,7 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     if (req.method === 'GET' && requestUrl.pathname === '/' && token !== null) {
       if (!tokens.redeem(token)) {
         res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' })
-        res.end(DENIED_PAGE)
+        res.end(DENIED_TOKEN)
         return
       }
       const value = serializeCookie(
@@ -78,7 +83,7 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     }
     if (!admitted(req)) {
       res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(DENIED_PAGE)
+      res.end(DENIED_AUTH)
       return
     }
     let innerCookie

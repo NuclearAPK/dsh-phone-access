@@ -105,18 +105,20 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.row },
               h('button', { type: 'button', style: styles.button, onClick: showLink }, 'Показать ссылку'),
               h('a', { style: styles.button, href: '/phone-access/ca', download: 'dsh-phone-ca.pem' }, 'Скачать CA'),
-              h('a', { style: styles.button, href: status.url, target: '_blank', rel: 'noreferrer' }, 'Открыть на этом ПК'),
               h('button', { type: 'button', style: styles.button, onClick: revoke }, 'Отозвать все'),
             ),
             link
               ? h('div', { style: styles.wrap },
                 h('p', { style: styles.muted }, 'Ссылка одноразовая. На телефоне сначала установите CA, потом откройте ссылку.'),
                 h('pre', { style: styles.code }, link.url),
-                h('button', {
-                  type: 'button',
-                  style: styles.button,
-                  onClick: () => { void navigator.clipboard?.writeText(link.url) },
-                }, 'Скопировать ссылку'),
+                h('div', { style: styles.row },
+                  h('a', { style: styles.button, href: link.url, target: '_blank', rel: 'noreferrer' }, 'Открыть ссылку на этом ПК'),
+                  h('button', {
+                    type: 'button',
+                    style: styles.button,
+                    onClick: () => { void navigator.clipboard?.writeText(link.url) },
+                  }, 'Скопировать ссылку'),
+                ),
               )
               : null,
             status.tlsMode === 'off'
