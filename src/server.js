@@ -48,9 +48,18 @@ export async function createPhoneServer({ config, tls, getSecret, inner, now = (
     return verifyCookie(getSecret(), cookie, { now }) !== null
   }
 
+  /**
+   * A top-level navigation is how the phone arrives from a QR scanner or
+   * another app; it carries no Origin and is not a cross-site subresource
+   * request, so the CSWSH-style refusal must not cover it.
+   * @param {http.IncomingMessage} req
+   */
+  const isNavigation = (req) => req.headers['sec-fetch-mode'] === 'navigate'
+    && req.headers['sec-fetch-dest'] === 'document'
+
   /** @param {http.IncomingMessage} req */
   const trustedOrigin = (req) => isAllowedOrigin(req.headers.origin, origin)
-    && req.headers['sec-fetch-site'] !== 'cross-site'
+    && (isNavigation(req) || req.headers['sec-fetch-site'] !== 'cross-site')
 
   /** @param {http.IncomingMessage} req @param {http.ServerResponse} res */
   const handle = async (req, res) => {

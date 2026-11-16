@@ -213,3 +213,40 @@ test('a stale inner cookie is refreshed once on 401', async () => {
   }
 })
 
+
+test('a cross-site top-level navigation is allowed to redeem the token', async () => {
+  const inner = await startFakeInner()
+  const { phone } = await startPhone(inner)
+  try {
+    const entry = await request(phone.port, `/?t=${phone.link().token}`, {
+      'sec-fetch-site': 'cross-site',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-dest': 'document',
+    })
+    assert.equal(entry.status, 302)
+    assert.ok(entry.headers['set-cookie'])
+  } finally {
+    await phone.close()
+    await inner.close()
+  }
+})
+
+test('a redirected top-level page load from another app is allowed', async () => {
+  const inner = await startFakeInner()
+  const { phone } = await startPhone(inner)
+  try {
+    const entry = await request(phone.port, `/?t=${phone.link().token}`)
+    const cookie = cookieOf(entry)
+    const page = await request(phone.port, '/', {
+      cookie,
+      'sec-fetch-site': 'cross-site',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-dest': 'document',
+    })
+    assert.equal(page.status, 200)
+    assert.match(page.body, /inner:/)
+  } finally {
+    await phone.close()
+    await inner.close()
+  }
+})
